@@ -117,11 +117,14 @@ ORDER BY error_rate_pct DESC;
 
 
 -- ==============================================================================
--- PHASE 3: 
+-- PHASE 3: OPERATIONAL ROOT-CAUSE & WORKFLOW QUEUE ANALYSIS
 -- ==============================================================================
 
+
+-- 3.1: Organize total leaked claims by Reason Code to explore primary clinical
+-- and billing root causes of leakage.
 SELECT 
-"Reason Code" AS reason_code,
+"Reason Code",
 COUNT(*) AS total_claims,
 ROUND(SUM(CAST("Paid Amount" AS REAL)), 2) AS total_paid_out
 FROM raw_data
@@ -131,10 +134,13 @@ AND CAST("Paid Amount" AS REAL) > 0
 GROUP BY "Reason Code"
 ORDER BY total_paid_out DESC;
 
--- result: each available reason code leaked money with some more than others. 
--- Next we should look at which were marked for Follow-up to see if the system is correctly flagging for review
+-- Finding: Each reason code leaked claims. Most commonly "Incorrect Billing Info" and "Patient Eligibility Issues"
+-- costing $3777 and $3411 respectively
 
 
+-- 3.2: Display statistics for each reason code by "Follow-up Status" (flagged for review)
+-- including number of correct flags, number of incorrect flags, and percentage of times marked incorrectly.
+-- Grouped by missed flag percentage descending
 SELECT
 "Reason Code",
 COUNT(*) AS total_count,
@@ -150,7 +156,7 @@ AND CAST("Paid Amount" AS REAL) > 0
 GROUP BY "Reason Code"
 ORDER BY "no_pct" DESC;
 
--- Result
+-- Finding: 
 
 
 
