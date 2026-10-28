@@ -121,11 +121,13 @@ ORDER BY error_rate_pct DESC;
 -- ==============================================================================
 
 
+
 -- 3.1: Organize total leaked claims by Reason Code to explore primary clinical
 -- and billing root causes of leakage.
 SELECT 
 "Reason Code",
-COUNT(*) AS total_claims,
+COUNT(*) AS total_leaked_claims,
+
 ROUND(SUM(CAST("Paid Amount" AS REAL)), 2) AS total_paid_out
 FROM raw_data
 WHERE "Claim Status" = 'Denied' 
@@ -135,7 +137,7 @@ GROUP BY "Reason Code"
 ORDER BY total_paid_out DESC;
 
 -- Finding: Each reason code leaked claims. Most commonly "Incorrect Billing Info" and "Patient Eligibility Issues"
--- costing $3777 and $3411 respectively
+-- costing $3,777 and $3,411 respectively
 
 
 -- 3.2: Display statistics for each reason code by "Follow-up Status" (flagged for review)
@@ -144,33 +146,45 @@ ORDER BY total_paid_out DESC;
 SELECT
 "Reason Code",
 COUNT(*) AS total_count,
-SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN 1 ELSE 0 END) AS yes_count,
-SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN 0 ELSE 1 END) AS no_count,
+ROUND(SUM(CAST("Paid Amount" AS REAL)), 2) AS total_leaked_disbursements,
+
+-- Flagged for internal review
+SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN 1 ELSE 0 END) AS flagged_count,
+ROUND(SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN CAST("Paid Amount" AS REAL) ELSE 0 END), 2) AS flagged_disbursements,
+
+-- Unflagged
+SUM(CASE WHEN "Follow-up Required" = 'No' THEN 1 ELSE 0 END) AS unflagged_count,
+ROUND(SUM(CASE WHEN "Follow-up Required" = 'No' THEN CAST("Paid Amount" AS REAL) ELSE 0 END), 2) AS unflagged_disbursements,
+
+-- Percentage of leaked claims that are unflagged  
 ROUND(100.0 * SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN 0 ELSE 1 END) 
-/ COUNT(*), 2) AS no_pct,
-ROUND(SUM(CAST("Paid Amount" AS REAL)), 2) AS total_paid_out
+/ COUNT(*), 2) AS unflagged_pct
+   
 FROM raw_data
 WHERE  "Claim Status" = 'Denied' 
 AND "Outcome" = 'Denied'
 AND CAST("Paid Amount" AS REAL) > 0
 GROUP BY "Reason Code"
-ORDER BY "no_pct" DESC;
+ORDER BY unflagged_pct DESC;
 
--- Finding: 
+-- Finding: "Duplicate Claims," "Missing Documentation," "Authorization Not Obtained," and "Pre-existing Condition" all had incorrect flag rates above 50%. 
+-- "Duplicate Claims" incorrectly flagged at a rate of 76.92%, costing $2,117 in finalized, unflagged disbursements, and "Missing Documentation" incorrectly flagged at 
+-- a rate of 73.33%, costing $2,463 in finalized, unflagged disbursements.
+
+
+-- ==============================================================================
+-- AUDIT CONCLUSION & SUMMARY FINDINGS
+-- ==============================================================================
+
+-- 1. Financial Exposure: $22,547 across 112 claims (11.2%) of claims permanently finalized as 'Denied' where payments were still disbursed.
+-- 2. Line Impact: Leakage is systemic across all 4 payer lines.
+-- 3. Workflow Failure: 50% of leaked funds ($11,089) occured without an interal mark for review.
+-- 4. Modeling Bridge: Summary aggregates exported to "excelAnalysis.xlsx' for MLR and clawback sensitivity modeling.
 
 
 
-SELECT
-"Insurance Type",
-COUNT(*) AS total_count,
-SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN 1 ELSE 0 END) AS yes_count,
-SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN 0 ELSE 1 END) AS no_count,
-ROUND(100.0 * SUM(CASE WHEN "Follow-up Required" = 'Yes' THEN 0 ELSE 1 END) 
-/ COUNT(*), 2) AS no_pct,
-ROUND(SUM(CAST("Paid Amount" AS REAL)), 2) AS total_paid_out
-FROM raw_data
-WHERE  "Claim Status" = 'Denied' 
-AND "Outcome" = 'Denied'
-AND CAST("Paid Amount" AS REAL) > 0
-GROUP BY "Insurance Type"
-ORDER BY "no_pct" DESC;
+
+
+
+
+
